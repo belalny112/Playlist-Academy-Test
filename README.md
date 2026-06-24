@@ -13,6 +13,9 @@ This project runs on any machine with zero external database installation requir
 ### Prerequisites
 1. Install the .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0
 2. Open the root folder in your preferred editor (e.g., Visual Studio Code).
+3. Since this project uses migrations, you must install the EF Core tools globally on your machine:
+   ```bash
+   dotnet tool install --global dotnet-ef
 
 ### Database Initialization
 1. Navigate into the main API folder:
