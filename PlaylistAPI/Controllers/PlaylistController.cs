@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using PlaylistAPI.Models;
-using PlaylistAPI.Data;
-using PlaylistAPI.DTOs; // Important: Gives us access to the DTOs
+using PlaylistAPI.DTOs;
+using PlaylistAPI.Services;
 
 namespace PlaylistAPI.Controllers;
 
@@ -10,141 +8,62 @@ namespace PlaylistAPI.Controllers;
 [Route("api/[controller]")]
 public class PlaylistController : ControllerBase
 {
-    private readonly PlaylistDbContext _context;
+    private readonly IPlaylistService _playlistService;
 
-    public PlaylistController(PlaylistDbContext context)
+    public PlaylistController(IPlaylistService playlistService)
     {
-        _context = context;
+        _playlistService = playlistService;
     }
 
-    // 1. GET ALL
+    // GET /api/playlist
     [HttpGet]
-    public ActionResult<IEnumerable<PlaylistDto>> GetPlaylists()
+    public async Task<ActionResult<IEnumerable<PlaylistDto>>> GetPlaylists()
     {
-        var dbPlaylists = _context.Playlists.Include(p => p.Songs).ToList();
-
-        var playlistDtos = dbPlaylists.Select(p => new PlaylistDto
-        {
-            Id = p.Id,
-            Name = p.Name,
-            Description = p.Description,
-            Songs = p.Songs.Select(s => new SongDto
-            {
-                Id = s.Id,
-                Title = s.Title,
-                Artist = s.Artist,
-                DurationInSeconds = s.DurationInSeconds
-            }).ToList()
-        }).ToList();
-
-        return Ok(playlistDtos);
+        var playlists = await _playlistService.GetAllPlaylistsAsync();
+        return Ok(playlists);
     }
 
-    // 2. GET BY ID
+    // GET /api/playlist/{id}
     [HttpGet("{id}")]
-    public ActionResult<PlaylistDto> GetPlaylistById(int id)
+    public async Task<ActionResult<PlaylistDto>> GetPlaylistById(int id)
     {
-        var playlist = _context.Playlists.Include(p => p.Songs).FirstOrDefault(p => p.Id == id);
-        if (playlist == null) return NotFound("That playlist does not exist.");
-
-        var playlistDto = new PlaylistDto
-        {
-            Id = playlist.Id,
-            Name = playlist.Name,
-            Description = playlist.Description,
-            Songs = playlist.Songs.Select(s => new SongDto
-            {
-                Id = s.Id,
-                Title = s.Title,
-                Artist = s.Artist,
-                DurationInSeconds = s.DurationInSeconds
-            }).ToList()
-        };
-
-        return Ok(playlistDto);
+        var playlist = await _playlistService.GetPlaylistByIdAsync(id);
+        if (playlist is null) return NotFound("That playlist does not exist.");
+        return Ok(playlist);
     }
 
-    // 3. CREATE PLAYLIST
+    // POST /api/playlist
     [HttpPost]
-    public ActionResult<PlaylistDto> CreatePlaylist([FromBody] CreatePlaylistDto newPlaylistDto)
+    public async Task<ActionResult<PlaylistDto>> CreatePlaylist([FromBody] CreatePlaylistDto dto)
     {
-        var playlistDbModel = new Playlist
-        {
-            Name = newPlaylistDto.Name,
-            Description = newPlaylistDto.Description
-        };
-
-        _context.Playlists.Add(playlistDbModel);
-        _context.SaveChanges();
-
-        var returnDto = new PlaylistDto
-        {
-            Id = playlistDbModel.Id,
-            Name = playlistDbModel.Name,
-            Description = playlistDbModel.Description,
-            Songs = new List<SongDto>()
-        };
-
-        return CreatedAtAction(nameof(GetPlaylistById), new { id = returnDto.Id }, returnDto);
+        var created = await _playlistService.CreatePlaylistAsync(dto);
+        return CreatedAtAction(nameof(GetPlaylistById), new { id = created.Id }, created);
     }
 
-    // 4. UPDATE PLAYLIST
+    // PUT /api/playlist/{id}
     [HttpPut("{id}")]
-    public IActionResult UpdatePlaylist(int id, [FromBody] CreatePlaylistDto updatedPlaylistDto)
+    public async Task<IActionResult> UpdatePlaylist(int id, [FromBody] CreatePlaylistDto dto)
     {
-        var existingPlaylist = _context.Playlists.FirstOrDefault(p => p.Id == id);
-        if (existingPlaylist == null) return NotFound();
-
-        existingPlaylist.Name = updatedPlaylistDto.Name;
-        existingPlaylist.Description = updatedPlaylistDto.Description;
-
-        _context.SaveChanges();
+        var updated = await _playlistService.UpdatePlaylistAsync(id, dto);
+        if (!updated) return NotFound();
         return NoContent();
     }
 
-    // 5. DELETE PLAYLIST
+    // DELETE /api/playlist/{id}
     [HttpDelete("{id}")]
-    public IActionResult DeletePlaylist(int id)
+    public async Task<IActionResult> DeletePlaylist(int id)
     {
-        var playlist = _context.Playlists.FirstOrDefault(p => p.Id == id);
-        if (playlist == null) return NotFound();
-
-        _context.Playlists.Remove(playlist);
-        _context.SaveChanges();
+        var deleted = await _playlistService.DeletePlaylistAsync(id);
+        if (!deleted) return NotFound();
         return NoContent();
     }
 
-    // 6. ADD SONG TO PLAYLIST
+    // POST /api/playlist/{playlistId}/song
     [HttpPost("{playlistId}/song")]
-    public ActionResult<PlaylistDto> AddSongToPlaylist(int playlistId, [FromBody] CreateSongDto newSongDto)
+    public async Task<ActionResult<PlaylistDto>> AddSongToPlaylist(int playlistId, [FromBody] CreateSongDto dto)
     {
-        var playlist = _context.Playlists.Include(p => p.Songs).FirstOrDefault(p => p.Id == playlistId);
-        if (playlist == null) return NotFound("That playlist does not exist.");
-
-        var songDbModel = new Song
-        {
-            Title = newSongDto.Title,
-            Artist = newSongDto.Artist,
-            DurationInSeconds = newSongDto.DurationInSeconds
-        };
-
-        playlist.Songs.Add(songDbModel);
-        _context.SaveChanges();
-
-        var returnDto = new PlaylistDto
-        {
-            Id = playlist.Id,
-            Name = playlist.Name,
-            Description = playlist.Description,
-            Songs = playlist.Songs.Select(s => new SongDto
-            {
-                Id = s.Id,
-                Title = s.Title,
-                Artist = s.Artist,
-                DurationInSeconds = s.DurationInSeconds
-            }).ToList()
-        };
-
-        return Ok(returnDto);
+        var result = await _playlistService.AddSongToPlaylistAsync(playlistId, dto);
+        if (result is null) return NotFound("That playlist does not exist.");
+        return Ok(result);
     }
 }

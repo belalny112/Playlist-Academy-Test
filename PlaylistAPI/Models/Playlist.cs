@@ -8,10 +8,11 @@ public class Playlist
 
     [Required(ErrorMessage = "Your playlist needs a name!")]
     [MaxLength(50)]
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
+    // Optional field — nullable string makes the intent explicit
     [MaxLength(500)]
-    public string Description { get; set; }
+    public string? Description { get; set; }
 
     public List<Song> Songs { get; set; } = new List<Song>();
 }

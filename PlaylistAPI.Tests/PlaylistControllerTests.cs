@@ -4,77 +4,97 @@ using PlaylistAPI.Controllers;
 using PlaylistAPI.Data;
 using PlaylistAPI.DTOs;
 using PlaylistAPI.Models;
+using PlaylistAPI.Services;
 
 namespace PlaylistAPI.Tests;
 
 public class PlaylistControllerTests
 {
-    // --- DATABASE SETUP ---
-    // Creates a fresh, empty fake database in RAM for every single test
-    private PlaylistDbContext GetDatabaseContext()
+    // Creates a fresh in-memory DB and wires up the real service for each test
+    private (PlaylistController controller, PlaylistDbContext context) CreateSut()
     {
         var options = new DbContextOptionsBuilder<PlaylistDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-            
-        return new PlaylistDbContext(options);
+
+        var context = new PlaylistDbContext(options);
+        var service = new PlaylistService(context);
+        var controller = new PlaylistController(service);
+
+        return (controller, context);
     }
 
-    // --- TEST 1: THE EMPTY ROOM ---
-    [Fact] 
-    public void GetPlaylists_ReturnsEmptyList_WhenDatabaseIsEmpty()
+    [Fact]
+    public async Task GetPlaylists_ReturnsEmptyList_WhenDatabaseIsEmpty()
     {
-        // ARRANGE
-        var context = GetDatabaseContext();
-        var controller = new PlaylistController(context);
+        var (controller, _) = CreateSut();
 
-        // ACT
-        var result = controller.GetPlaylists();
+        var result = await controller.GetPlaylists();
 
-        // ASSERT
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var returnedPlaylists = Assert.IsAssignableFrom<IEnumerable<PlaylistDto>>(okResult.Value);
-        Assert.Empty(returnedPlaylists); 
+        Assert.Empty(returnedPlaylists);
     }
 
-    // --- TEST 2: THE HAPPY PATH ---
     [Fact]
-    public void CreatePlaylist_ReturnsCreated_WhenDataIsValid()
+    public async Task CreatePlaylist_ReturnsCreated_WhenDataIsValid()
     {
-        // ARRANGE
-        var context = GetDatabaseContext();
-        var controller = new PlaylistController(context);
-        
-        var newPlaylistDto = new CreatePlaylistDto
+        var (controller, _) = CreateSut();
+
+        var dto = new CreatePlaylistDto
         {
             Name = "5-Team League Warmup",
             Description = "Music for the courts"
         };
 
-        // ACT
-        var result = controller.CreatePlaylist(newPlaylistDto);
+        var result = await controller.CreatePlaylist(dto);
 
-        // ASSERT
         var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
         var returnedDto = Assert.IsType<PlaylistDto>(createdResult.Value);
-        
+
         Assert.Equal("5-Team League Warmup", returnedDto.Name);
-        Assert.Equal(1, returnedDto.Id); 
+        Assert.Equal(1, returnedDto.Id);
     }
 
-    // --- TEST 3: THE SAD PATH ---
     [Fact]
-    public void GetPlaylistById_ReturnsNotFound_WhenUserSendsStupidId()
+    public async Task GetPlaylistById_ReturnsNotFound_WhenIdDoesNotExist()
     {
-        // ARRANGE
-        var context = GetDatabaseContext();
-        var controller = new PlaylistController(context);
+        var (controller, _) = CreateSut();
 
-        // ACT
-        var result = controller.GetPlaylistById(999);
+        var result = await controller.GetPlaylistById(999);
 
-        // ASSERT
         var notFoundResult = Assert.IsType<NotFoundObjectResult>(result.Result);
         Assert.Equal("That playlist does not exist.", notFoundResult.Value);
+    }
+
+    [Fact]
+    public async Task DeletePlaylist_ReturnsNotFound_WhenIdDoesNotExist()
+    {
+        var (controller, _) = CreateSut();
+
+        var result = await controller.DeletePlaylist(999);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AddSongToPlaylist_ReturnsUpdatedPlaylist_WhenPlaylistExists()
+    {
+        var (controller, _) = CreateSut();
+
+        // Create a playlist first
+        var created = await controller.CreatePlaylist(new CreatePlaylistDto { Name = "Test Playlist" });
+        var createdResult = Assert.IsType<CreatedAtActionResult>(created.Result);
+        var playlist = Assert.IsType<PlaylistDto>(createdResult.Value);
+
+        // Add a song to it
+        var songDto = new CreateSongDto { Title = "Track 1", Artist = "Artist A", DurationInSeconds = 180 };
+        var result = await controller.AddSongToPlaylist(playlist.Id, songDto);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var updatedPlaylist = Assert.IsType<PlaylistDto>(okResult.Value);
+
+        Assert.Single(updatedPlaylist.Songs);
+        Assert.Equal("Track 1", updatedPlaylist.Songs[0].Title);
     }
 }

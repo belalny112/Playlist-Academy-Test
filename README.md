@@ -1,22 +1,21 @@
 # Playlist API - Academy Backend Developer Test
 
-**Author:** Belal Nader
-**Framework:** ASP.NET Core 10 Web API
+**Author:** Belal Nader  
+**Framework:** ASP.NET Core 10 Web API  
 **Database:** SQLite via Entity Framework Core
 
 ---
 
 ## 🚀 Phase 1: Local Setup & Database Generation
 
-This project is built to run easily on any machine with zero external database installation required.
+This project runs on any machine with zero external database installation required.
 
 ### Prerequisites
-1. Install the .NET 10 SDK (https://dotnet.microsoft.com/download/dotnet/10.0).
-2. Open the root folder in your preferred code editor (e.g., Visual Studio Code).
+1. Install the .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0
+2. Open the root folder in your preferred editor (e.g., Visual Studio Code).
 
 ### Database Initialization
-Before running the app, we need to let Entity Framework generate the local SQLite database file.
-1. Open your terminal and navigate into the main API folder:
+1. Navigate into the main API folder:
    ```bash
    cd PlaylistAPI
    ```
@@ -24,69 +23,102 @@ Before running the app, we need to let Entity Framework generate the local SQLit
    ```bash
    dotnet build
    ```
-3. Execute the database migrations to build the playlist.db file and its tables:
+3. Apply all migrations to create the `playlist.db` file and its tables:
    ```bash
+   dotnet ef migrations add AddPlaylistIdToSong
    dotnet ef database update
    ```
+
+> **Note:** You may see a `NU1903` warning about a known vulnerability in `SQLitePCLRaw.lib.e_sqlite3 2.1.11`. This is a transitive dependency pulled in by `Microsoft.EntityFrameworkCore.Sqlite` and cannot be upgraded independently — it does not affect the functionality of this project.
 
 ---
 
 ## 💻 Phase 2: Running the API
 
-Once the database is initialized, you can launch the local server.
-1. Make sure your terminal is still inside the PlaylistAPI directory.
-2. Run the server using the HTTP profile:
+1. Ensure your terminal is inside the `PlaylistAPI` directory.
+2. Run the server:
    ```bash
    dotnet run --launch-profile "http"
    ```
-3. Open your browser and navigate to the interactive Swagger dashboard to test the endpoints:
+3. Open the Swagger UI in your browser to explore and test all endpoints:  
    http://localhost:5284/swagger
 
 ---
 
-## 🧪 Phase 3: Executing the Test Suite (Bonus Deliverable)
+## 🧪 Phase 3: Running the Test Suite
 
-The testing architecture is split into a separate project to ensure the production database is never corrupted. It contains both Unit Tests and Integration Tests.
+The test project is kept separate to ensure the production database is never touched.
 
-### How to Run the Tests
-1. Open a new terminal and navigate to the test project directory:
+1. Navigate to the test project:
    ```bash
    cd PlaylistAPI.Tests
    ```
-2. Run the complete suite:
+2. Run all tests:
    ```bash
    dotnet test
    ```
 
-### What the Tests Are Checking:
-* Unit Tests (In-Memory DB): These tests isolate the PlaylistController and inject a fake RAM-based database to verify the core C# logic (e.g., returning an empty list when the DB is empty, or rejecting invalid IDs).
-* Integration Tests (SQLite Sandbox): These tests boot up a full simulation of the web server. To protect your real data, the suite automatically creates a disposable integration_test.db file, tests the physical saving/updating/deleting of HTTP requests, and verifies that the [Required] data validation attributes actively block bad user inputs.
+### What the Tests Cover
+- **Unit Tests** (In-Memory DB): Isolate the `PlaylistController` and `PlaylistService`, injecting a RAM-based database to verify core logic — empty list returns, valid creation, 404 on missing IDs, song addition.
+- **Integration Tests** (SQLite Sandbox): Boot a full web server simulation. Each test receives its own isolated SQLite file (named by GUID) so tests are safe to run in parallel. Tests verify end-to-end HTTP flows: create, get, update, delete, and song addition, as well as validation rejection (missing name, invalid duration).
 
 ---
 
 ## Database Architecture & Justification
 
 ### Why SQLite?
-For this specific assessment, SQLite was chosen over a heavier SQL database (like PostgreSQL) or a NoSQL database (like MongoDB) for two critical reasons:
-1. Zero-Configuration Portability: The prompt requires the code to run properly on any machine. SQLite creates a local .db file directly inside the project folder, eliminating the need for reviewers to install, configure, or authenticate an external database server just to run the code.
-2. Relational Data Integrity: The relationship between a Playlist and its Songs is strictly relational (One-to-Many). A SQL relational database natively handles these Foreign Key constraints.
+1. **Zero-Configuration Portability:** SQLite creates a local `.db` file inside the project, so reviewers need no external database server to run the code.
+2. **Relational Data Integrity:** The Playlist → Songs relationship is strictly One-to-Many. A relational database enforces this naturally with Foreign Key constraints.
 
-### Database Schema (Entity-Relationship)
-Table: Playlists
-* Id (PK, Auto-Incrementing Integer)
-* Name (String, Required, Max Length: 50)
-* Description (String, Required, Max Length: 500)
+### Schema (Entity-Relationship)
 
-Table: Songs
-* Id (PK, Auto-Incrementing Integer)
-* Title (String, Required, Max Length: 100)
-* Artist (String, Required)
-* DurationInSeconds (Integer, Required, Range: 1-3600)
-* PlaylistId (FK, links to Playlists.Id)
+**Table: Playlists**
+| Column | Type | Constraints |
+|--------|------|-------------|
+| Id | INTEGER | PK, Auto-Increment |
+| Name | TEXT | Required, Max 50 chars |
+| Description | TEXT | Optional, Max 500 chars |
+
+**Table: Songs**
+| Column | Type | Constraints |
+|--------|------|-------------|
+| Id | INTEGER | PK, Auto-Increment |
+| Title | TEXT | Required, Max 100 chars |
+| Artist | TEXT | Required |
+| DurationInSeconds | INTEGER | Required, Range: 1–3600 |
+| PlaylistId | INTEGER | FK → Playlists.Id |
 
 ---
 
-## Architectural Decisions & SOLID Principles
+## Architecture & SOLID Principles
 
-* Data Transfer Objects (DTOs): The API never exposes raw database models to the client. DTOs act as messengers for all inputs and outputs to ensure security and adhere to the Single Responsibility Principle.
-* Dependency Injection: The database context is injected into the controller via the constructor, adhering to the Dependency Inversion Principle. This is what allowed the Integration Tests to seamlessly swap the production database for a sandbox file.
+### Project Structure
+```
+PlaylistAPI/
+├── Controllers/        # HTTP layer only — routes requests, returns responses
+│   └── PlaylistController.cs
+├── Services/           # Business logic layer
+│   ├── IPlaylistService.cs
+│   └── PlaylistService.cs
+├── DTOs/               # Data Transfer Objects (input/output contracts)
+│   ├── CreatePlaylistDto.cs
+│   ├── CreateSongDto.cs
+│   ├── PlaylistDto.cs
+│   └── SongDto.cs
+├── Models/             # EF Core database entities
+│   ├── Playlist.cs
+│   └── Song.cs
+├── Data/
+│   └── PlaylistDbContext.cs
+└── Program.cs
+
+PlaylistAPI.Tests/
+├── PlaylistControllerTests.cs   # Unit tests
+└── PlaylistIntegrationTests.cs  # Integration tests
+```
+
+### SOLID Application
+
+- **Single Responsibility:** The controller only handles HTTP concerns. All business logic lives in `PlaylistService`. DTO mapping is centralized in a single private `MapToDto` method inside the service.
+- **Open/Closed:** New operations can be added by extending `IPlaylistService` without modifying the controller.
+- **Dependency Inversion:** `PlaylistController` depends on the `IPlaylistService` abstraction, not the concrete `PlaylistService`. This is what allows unit tests to inject a real service with an in-memory DB, and integration tests to swap the DB connection entirely.
